@@ -8,6 +8,7 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.FileIO
 import spray.json.{ DefaultJsonProtocol, _ }
+import purecsv.safe._
 
 object StreamingCopy extends DefaultJsonProtocol {
 
@@ -23,11 +24,12 @@ object StreamingCopy extends DefaultJsonProtocol {
     val out = Paths.get("./output.txt")
 
     val source = FileIO.fromPath(in)
+
     val sink = FileIO.toPath(out, Set(CREATE, WRITE, APPEND))
 
     val framingJson = Compression.gunzip().via(JsonFraming.objectScanner(Integer.MAX_VALUE)).map(_.utf8String)
 
-    val parsing = Flow[String].map(line => line.parseJson.convertTo[Row])
+    val parsing = Flow[String].map(line => line.parseJson.convertTo[Row]).map(_.toCSV())
 
     source.via(framingJson).via(parsing).take(10).runForeach(println).onComplete { _ => system.terminate() }
   }
