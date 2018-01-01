@@ -10,8 +10,10 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.FileIO
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
+import scala.util.{ Failure, Success }
 import spray.json.{ DefaultJsonProtocol, _ }
 import purecsv.safe._
+import sys.process._
 
 object StreamingCopy extends DefaultJsonProtocol {
 
@@ -37,9 +39,23 @@ object StreamingCopy extends DefaultJsonProtocol {
 
     val blueprint = source.via(framingJson).via(parsing).via(floor).via(toCsv).map(ByteString.fromString).to(sink)
 
-    blueprint.run()
+    val result = blueprint.run()
 
-    Thread.sleep(1000 * 10) // TODO sleep?
+    result.onComplete {
+      case Success(_) =>
+        println("success")
+        system.terminate()
+        "head -100 ./output.txt" #| "tail -10" ! match {
+          case 0 => println("pub process success")
+          case 1 => println("sub process failure")
+        }
+
+      case Failure(e) =>
+        println("failure: " + e.getMessage)
+        system.terminate()
+    }
+
+    Thread.sleep(10000)
 
     system.terminate()
   }
