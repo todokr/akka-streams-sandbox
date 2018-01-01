@@ -42,17 +42,30 @@ object StreamingCopy extends DefaultJsonProtocol {
     val result = blueprint.run()
 
     result.onComplete {
-      case Success(_) =>
+      case Success(_) => {
         println("success")
         system.terminate()
-        "head -100 ./output.txt" #| "tail -10" ! match {
-          case 0 => println("pub process success")
-          case 1 => println("sub process failure")
-        }
 
-      case Failure(e) =>
+        import collection.mutable.ArrayBuffer
+        val out = ArrayBuffer[String]()
+        val err = ArrayBuffer[String]()
+
+        val logger = ProcessLogger(
+          (o: String) => out += o,
+          (e: String) => err += e)
+
+        "head -100 ./output.txt" #| "tail -10" ! logger match {
+          case 1 =>
+            println("Error:")
+            err.toSeq.foreach(println)
+          case 0 =>
+            println("Success:")
+            out.toSeq.foreach(println)
+        }
+      }
+      case Failure(e) => {
         println("failure: " + e.getMessage)
-        system.terminate()
+      }
     }
 
     Thread.sleep(10000)
